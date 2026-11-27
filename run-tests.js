@@ -1,0 +1,25 @@
+// Run: node tests/run-tests.js
+const AI = require('./ai.js'), P = require('./priority.js'), D = require('./duplicates.js');
+let pass = 0, fail = 0;
+const ok = (n, c, info = '') => { c ? pass++ : fail++; console.log((c ? 'PASS' : 'FAIL') + '  ' + n + (info ? '  ' + info : '')); };
+const R1 = 'An urgent family need for clean drinking water in Al-Rimal. The family consists of 6 people and has had no water for two days.';
+const R2 = 'A shelter center in Al-Shati needs food meals for 25 people. There are not enough meals available today.';
+const R3 = 'A child in Al-Rimal has an injury and urgently needs medical care.';
+const run = t => { const a = AI.analyze(t); return { a, p: P.calc(a) }; };
+const t1 = run(R1); ok('T1 water: need/location/people/urgency', t1.a.need === 'water' && t1.a.location.en === 'Al-Rimal' && t1.a.people === 6 && t1.a.urgency.includes('urgent') && t1.p.level === 'high', JSON.stringify({ s: t1.p.score }));
+const t2 = run(R2); ok('T2 food: need/location/people', t2.a.need === 'food' && t2.a.location.en === 'Al-Shati' && t2.a.people === 25, 'score ' + t2.p.score + ' ' + t2.p.level);
+ok('Different inputs give different results', t1.p.score !== t2.p.score && t1.a.need !== t2.a.need);
+const pool = [{ id: 'RISE-001', text: R1, ...t1.a }];
+const nr = 'Family in Al-Rimal needs drinking water, there is no water since yesterday.';
+const d = D.check(AI.analyze(nr), nr, pool); ok('T3 duplicate detected, original ID shown, pool untouched', d.status === 'potential' && d.id === 'RISE-001' && pool.length === 1, 'score ' + d.score);
+ok('No duplicate for different need', D.check(t2.a, R2, pool).status === 'none');
+ok('Empty report rejected', AI.validate('') === 'reqDesc' && AI.validate('   ') === 'reqDesc');
+ok('Too short / too long rejected', AI.validate('help') === 'shortDesc' && AI.validate('x'.repeat(2001)) === 'longDesc');
+const u = AI.analyze('Please help us as soon as possible'); ok('Unknown need => null, nothing invented', u.need === null && u.location === null && u.people === null && u.missing.length === 3);
+const m = AI.analyze('A child needs medical care urgently'); ok('Missing location/people stay null', m.need === 'health' && m.location === null && m.people === null && m.missing.includes('location'));
+const ar = AI.analyze('عائلة تحتاج بشكل عاجل إلى مياه شرب نظيفة في الرمال. تتكون العائلة من 6 أشخاص ولا توجد لديهم مياه منذ يومين.');
+ok('Arabic water report', ar.need === 'water' && ar.location.key === 'rimal' && ar.people === 6 && ar.urgency.includes('urgent'));
+const ar2 = AI.analyze('مركز إيواء في الشاطئ يحتاج إلى وجبات طعام لـ 25 شخصاً. لا تتوفر وجبات كافية اليوم.'); ok('Arabic food report', ar2.need === 'food' && ar2.location.key === 'shati' && ar2.people === 25);
+ok('Arabic report matches English duplicate', D.check(ar, '', pool).status === 'potential');
+ok('English report', AI.analyze(R3).need === 'health');
+console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
